@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {plan,splitPlan,Ledger,removeOne} from '../src/engine.js';
+const message={id:'m1',chatId:'a',at:'2026-10-27T10:00:00Z'};
+function adapter(overrides={}){return{chatId:async()=> 'a',openRemoval:async()=>({scope:'self'}),confirmRemoval:async()=>{},isRemoved:async()=>true,...overrides};}
+test('inclusive date range preserves other chats and earlier messages',()=>{const rows=[message,{...message,id:'m2',chatId:'b'},{...message,id:'m3',at:'2026-10-26T23:59:59Z'}];assert.deepEqual(plan(rows,{chatId:'a',start:message.at,end:message.at}),[message]);});
+test('invalid or reversed dates fail closed',()=>{assert.throws(()=>plan([],{chatId:'a',start:'bad',end:message.at}));assert.throws(()=>plan([],{chatId:'a',start:'2026-10-28',end:'2026-10-27'}));});
+test('duplicate identities cannot enter a plan',()=>assert.throws(()=>plan([message,message],{chatId:'a',start:message.at,end:message.at})));
+test('two lanes partition every identity exactly once',()=>{for(let n=0;n<30;n++){const rows=Array.from({length:n},(_,id)=>({id}));const lanes=splitPlan(rows);assert.equal(new Set(lanes.flat().map(x=>x.id)).size,n);assert.equal(lanes.flat().length,n);assert.deepEqual(lanes[0],rows.slice(0,Math.ceil(n/2)));}});
+test('confirmed self removal charges once',async()=>{const ledger=new Ledger(2);await removeOne(adapter(),message,ledger);await removeOne(adapter(),message,ledger);assert.equal(ledger.balance,1);assert.equal(ledger.receipts.size,1);});
+test('wrong scope never confirms or charges',async()=>{const ledger=new Ledger(2);let clicked=false;await assert.rejects(removeOne(adapter({openRemoval:async()=>({scope:'everyone'}),confirmRemoval:async()=>{clicked=true;}}),message,ledger));assert.equal(clicked,false);assert.equal(ledger.balance,2);});
+test('wrong chat cannot open removal',async()=>{let opened=false;await assert.rejects(removeOne(adapter({chatId:async()=> 'b',openRemoval:async()=>{opened=true;}}),message,new Ledger(1)));assert.equal(opened,false);});
+test('chat change between opening and confirming stops mutation',async()=>{let calls=0,confirmed=false;await assert.rejects(removeOne(adapter({chatId:async()=>++calls===1?'a':'b',confirmRemoval:async()=>{confirmed=true;}}),message,new Ledger(1)));assert.equal(confirmed,false);});
+test('unverified removal consumes no credits',async()=>{const ledger=new Ledger(2);await assert.rejects(removeOne(adapter({isRemoved:async()=>false}),message,ledger));assert.equal(ledger.balance,2);assert.equal(ledger.pending.size,0);});
+test('empty wallet cannot remove a message',async()=>{let touched=false;await assert.rejects(removeOne(adapter({confirmRemoval:async()=>{touched=true;}}),message,new Ledger(0)));assert.equal(touched,false);});
+test('parallel lanes cannot overspend the final credit',async()=>{let confirmed=0;const a=adapter({confirmRemoval:async()=>{confirmed++;}});const ledger=new Ledger(1);const results=await Promise.allSettled([removeOne(a,message,ledger),removeOne(a,{...message,id:'m2'},ledger)]);assert.equal(confirmed,1);assert.equal(ledger.balance,0);assert.equal(results.filter(x=>x.status==='rejected').length,1);});
+test('concurrent retries cannot remove or charge the same identity twice',async()=>{let confirmed=0;const a=adapter({confirmRemoval:async()=>{confirmed++;}});const ledger=new Ledger(2);await Promise.all([removeOne(a,message,ledger),removeOne(a,message,ledger)]);assert.equal(confirmed,1);assert.equal(ledger.balance,1);});

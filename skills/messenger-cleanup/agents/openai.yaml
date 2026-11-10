@@ -1,0 +1,4 @@
+interface:
+  display_name: "Quiet Sweep"
+  short_description: "Preview and clear a precise Messenger message range"
+  default_prompt: "Use $messenger-cleanup to preview a selected conversation range and remove messages from my view only."
