@@ -7,3 +7,12 @@ coverage/
 *.log
 .agents/
 .claude/
+
+# Local credentials and browser sessions
+*.pem
+*.key
+credentials*.json
+cookies*.json
+storage-state*.json
+storageState*.json
+.auth/
