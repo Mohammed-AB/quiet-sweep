@@ -58,7 +58,7 @@ npm start
 
 Open **http://127.0.0.1:4173** and click **Play demo**.
 
-This repository is currently private; cloning requires access. There is no `npm install` step. The local server binds to `127.0.0.1`.
+The repository is public and free to clone. There is no `npm install` step. The local server binds to `127.0.0.1`.
 
 **Try this first:** choose **Weekend plans**, select **October 27–28, 2026**, and preview. You should see **24 selected / 24 preserved**. Start, pause, resume, and download the report. All timestamps in the demo use UTC; state resets on reload.
 
